@@ -16,23 +16,23 @@ data class ExpenseItem(
     @JoinColumn(name = "report_id")
     val report: AdvanceReport,
 
-    val description: String,
+    var description: String,
 
-    val date: LocalDate,
+    var date: LocalDate,
 
-    val quantity: Int,
-
-    @Column(precision = 10, scale = 2)
-    val unitPrice: BigDecimal,
+    var quantity: Int,
 
     @Column(precision = 10, scale = 2)
-    val totalCost: BigDecimal,
+    var unitPrice: BigDecimal,
 
-    val hasReceipt: Boolean = false,
+    @Column(precision = 10, scale = 2)
+    var totalCost: BigDecimal,
+
+    var hasReceipt: Boolean = false,
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "receipt_id")
-    val receipt: Receipt? = null,
+    var receipt: Receipt? = null,
 
     val createdAt: LocalDateTime = LocalDateTime.now(),
 

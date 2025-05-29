@@ -17,14 +17,14 @@ data class User(
     @Column(nullable = false)
     var passwordHash: String,
 
-    val fullName: String,
+    var fullName: String,
 
-    val email: String,
+    var email: String,
 
     @Enumerated(EnumType.STRING)
     val role: UserRole,
 
-    val departmentId: Long? = null,
+    var departmentId: Long? = null,
 
     val createdAt: LocalDateTime = LocalDateTime.now(),
 

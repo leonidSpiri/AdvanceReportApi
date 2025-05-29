@@ -1,4 +1,4 @@
-package ru.spiridonov.advance.payload
+package ru.spiridonov.advance.payload.response
 
 data class TokenResponse(
     val accessToken: String,

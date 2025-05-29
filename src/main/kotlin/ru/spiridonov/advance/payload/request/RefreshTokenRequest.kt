@@ -1,4 +1,4 @@
-package ru.spiridonov.advance.payload
+package ru.spiridonov.advance.payload.request
 
 import jakarta.validation.constraints.NotBlank
 

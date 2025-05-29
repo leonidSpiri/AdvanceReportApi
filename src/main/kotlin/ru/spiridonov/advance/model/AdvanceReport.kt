@@ -13,15 +13,15 @@ data class AdvanceReport(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
 
-    val title: String,
+    var title: String,
 
-    val project: String,
+    var project: String,
 
-    val businessTripLocation: String,
+    var businessTripLocation: String,
 
-    val startDate: LocalDate,
+    var startDate: LocalDate,
 
-    val endDate: LocalDate,
+    var endDate: LocalDate,
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
