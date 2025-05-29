@@ -30,7 +30,9 @@ data class ExpenseItem(
 
     val hasReceipt: Boolean = false,
 
-    var receiptId: Long? = null,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receipt_id")
+    val receipt: Receipt? = null,
 
     val createdAt: LocalDateTime = LocalDateTime.now(),
 

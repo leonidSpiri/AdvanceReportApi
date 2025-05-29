@@ -27,10 +27,10 @@ class SecurityConfig(
             .csrf { it.disable() }
             .cors { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
-            .authorizeHttpRequests { authz ->
-                authz
+            .authorizeHttpRequests { auth ->
+                auth
                     .requestMatchers("/api/v1/auth/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                    .anyRequest().authenticated()
+                    .anyRequest().fullyAuthenticated()
             }
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
 
