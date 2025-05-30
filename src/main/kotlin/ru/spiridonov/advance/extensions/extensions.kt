@@ -106,7 +106,3 @@ fun UserService.getUserByUsername(username: String): UserDto {
         .orElseThrow { EntityNotFoundException("User not found") }
         .toDto()
 }
-
-//fun AdvanceReportService.getAllReports(): List<AdvanceReportDto> {
-//    return advanceReportRepository.findAll().map { it.toDto() }
-//}

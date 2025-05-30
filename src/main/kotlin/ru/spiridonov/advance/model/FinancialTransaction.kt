@@ -31,5 +31,9 @@ data class FinancialTransaction(
     @JoinColumn(name = "created_by")
     val createdBy: User,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "advance_report_id")
+    val advanceReport: AdvanceReport? = null,
+
     val createdAt: LocalDateTime = LocalDateTime.now()
 )

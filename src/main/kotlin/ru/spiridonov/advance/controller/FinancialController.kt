@@ -9,21 +9,27 @@ import org.springframework.web.bind.annotation.*
 import ru.spiridonov.advance.extensions.getUserByUsername
 import ru.spiridonov.advance.model.enums.UserRole
 import ru.spiridonov.advance.payload.FinancialTransactionDto
-import ru.spiridonov.advance.payload.UserBalanceDto
 import ru.spiridonov.advance.payload.request.CreateFinancialTransactionRequest
+import ru.spiridonov.advance.service.AdvanceReportService
 import ru.spiridonov.advance.service.FinancialService
 import ru.spiridonov.advance.service.UserService
+import java.math.BigDecimal
 
 @RestController
 @RequestMapping("/api/v1/finance")
 @SecurityRequirement(name = "bearerAuth")
 class FinancialController(
     private val financialService: FinancialService,
+    private val advanceReportService: AdvanceReportService,
     private val userService: UserService
 ) {
-    @GetMapping("/users/{userId}/balance")
-    fun getUserBalance(@PathVariable userId: Long): ResponseEntity<UserBalanceDto> {
-        return ResponseEntity.ok(financialService.getUserBalance(userId))
+    @GetMapping("/users/balance")
+    fun getUserBalance(
+        authentication: Authentication
+    ): ResponseEntity<BigDecimal> {
+        val currentUser = userService.getUserByUsername(authentication.name)
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(advanceReportService.getUserBalance(currentUser.id))
     }
 
     @PostMapping("/transactions")

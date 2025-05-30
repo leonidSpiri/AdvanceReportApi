@@ -7,6 +7,7 @@ import ru.spiridonov.advance.extensions.toDto
 import ru.spiridonov.advance.model.AdvanceReport
 import ru.spiridonov.advance.model.User
 import ru.spiridonov.advance.model.enums.ReportStatus
+import ru.spiridonov.advance.model.enums.TransactionType
 import ru.spiridonov.advance.payload.AdvanceReportDto
 import ru.spiridonov.advance.payload.request.*
 import ru.spiridonov.advance.repository.*
@@ -30,7 +31,7 @@ class AdvanceReportService(
         val user = userRepository.findById(userId)
             .orElseThrow { EntityNotFoundException("User not found") }
 
-        val previousBalance = calculateUserBalance(user)
+        val previousBalance = getLastReportBalance(user)
 
         val report = AdvanceReport(
             title = request.title,
@@ -105,7 +106,7 @@ class AdvanceReportService(
         val report = advanceReportRepository.findById(id)
             .orElseThrow { EntityNotFoundException("Report not found") }
 
-        if (report.status != ReportStatus.DRAFT) {
+        if (report.status != ReportStatus.DRAFT || report.status != ReportStatus.REJECTED) {
             throw IllegalStateException("Only draft reports can be submitted")
         }
 
@@ -115,7 +116,13 @@ class AdvanceReportService(
         report.supervisor = supervisor
         report.status = ReportStatus.SUBMITTED
         report.updatedAt = LocalDateTime.now()
-        recalculateReportTotals(report)
+
+        // Calculate final balance: previousBalance + advances - expenses
+        val advances = getAdvancesForReport(report)
+        val expenses = expenseItemRepository.findByReport(report).sumOf { it.totalCost }
+
+        report.totalAmount = expenses
+        report.currentBalance = report.previousBalance + advances - expenses
 
         return advanceReportRepository.save(report).toDto(expenseItemRepository, attachmentRepository)
     }
@@ -167,13 +174,20 @@ class AdvanceReportService(
         return advanceReportRepository.save(report).toDto(expenseItemRepository, attachmentRepository)
     }
 
-    private fun calculateUserBalance(user: User): BigDecimal {
-        return financialTransactionRepository.calculateTotalBalanceForUser(user) ?: BigDecimal.ZERO
+    fun getUserBalance(userId: Long): BigDecimal {
+        val user = userRepository.findById(userId)
+            .orElseThrow { EntityNotFoundException("User not found") }
+        return getLastReportBalance(user)
     }
 
-    private fun recalculateReportTotals(report: AdvanceReport) {
-        val items = expenseItemRepository.findByReport(report)
-        report.totalAmount = items.sumOf { it.totalCost }
-        report.currentBalance = report.previousBalance - report.totalAmount
+    private fun getLastReportBalance(user: User): BigDecimal {
+        val lastReport = advanceReportRepository.findTopByUserOrderByCreatedAtDesc(user)
+        return lastReport?.currentBalance ?: BigDecimal.ZERO
+    }
+
+    private fun getAdvancesForReport(report: AdvanceReport): BigDecimal {
+        return financialTransactionRepository.findByUserAndAdvanceReport(report.user, report)
+            .filter { it.type == TransactionType.ADVANCE }
+            .sumOf { it.amount }
     }
 }
