@@ -30,7 +30,7 @@ data class ExpenseItem(
 
     var hasReceipt: Boolean = false,
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "receipt_id")
     var receipt: Receipt? = null,
 
