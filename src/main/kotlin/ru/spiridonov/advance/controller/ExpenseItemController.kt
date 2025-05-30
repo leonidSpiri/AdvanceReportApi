@@ -1,5 +1,6 @@
 package ru.spiridonov.advance.controller
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -10,6 +11,7 @@ import ru.spiridonov.advance.service.ExpenseItemService
 
 @RestController
 @RequestMapping("/api/v1/reports/{reportId}/items")
+@SecurityRequirement(name = "bearerAuth")
 class ExpenseItemController(
     private val expenseItemService: ExpenseItemService
 ) {

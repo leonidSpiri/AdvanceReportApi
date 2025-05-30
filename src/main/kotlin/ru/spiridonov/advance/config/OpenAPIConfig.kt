@@ -4,6 +4,7 @@ import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Contact
 import io.swagger.v3.oas.models.info.Info
 import io.swagger.v3.oas.models.info.License
+import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.servers.Server
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
@@ -20,6 +21,10 @@ class OpenAPIConfig {
         val devServer = Server()
         devServer.url = devUrl
         devServer.description = "Server URL in Development environment"
+        val bearerSchema = SecurityScheme()
+            .type(SecurityScheme.Type.HTTP)
+            .scheme("bearer")
+            .bearerFormat("JWT")
 
         val contact = Contact()
         contact.email = "2003.leonid2003@gmail.com"
@@ -32,6 +37,10 @@ class OpenAPIConfig {
             .contact(contact)
             .description("This API exposes endpoints to manage tutorials.")
             .license(mitLicense)
-        return OpenAPI().info(info).servers(listOf(devServer))
+
+        return OpenAPI()
+            .schemaRequirement("bearerAuth", bearerSchema)
+            .info(info)
+            .servers(listOf(devServer))
     }
 }

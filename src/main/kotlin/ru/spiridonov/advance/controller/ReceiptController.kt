@@ -1,5 +1,6 @@
 package ru.spiridonov.advance.controller
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -12,6 +13,7 @@ import ru.spiridonov.advance.service.ReceiptService
 
 @RestController
 @RequestMapping("/api/v1/receipts")
+@SecurityRequirement(name = "bearerAuth")
 class ReceiptController(
     private val receiptService: ReceiptService,
     private val fileUploadService: FileUploadService

@@ -1,5 +1,6 @@
 package ru.spiridonov.advance.controller
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
@@ -15,6 +16,7 @@ import ru.spiridonov.advance.service.UserService
 
 @RestController
 @RequestMapping("/api/v1/finance")
+@SecurityRequirement(name = "bearerAuth")
 class FinancialController(
     private val financialService: FinancialService,
     private val userService: UserService
