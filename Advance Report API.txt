@@ -1,0 +1,1484 @@
+# Advance Report API
+
+A comprehensive system for managing advance reports, expense tracking, and financial transactions for business trips.
+
+## Project Overview
+
+The Advance Report API is a Spring Boot application written in Kotlin that provides a complete solution for managing advance reports for business trips. The system allows employees to create advance reports, add expense items, attach receipts, and submit them for approval. Supervisors can review, approve, or reject reports, and accounting staff can process financial transactions and archive approved reports.
+
+## Project Structure
+
+The application follows a standard layered architecture:
+
+- **Controllers**: Handle HTTP requests and responses
+  - `AdvanceReportController`: Manages advance reports
+  - `FinancialController`: Handles financial transactions
+  - `UserController`: Manages user accounts
+
+- **Services**: Implement business logic
+  - `AdvanceReportService`: Business logic for advance reports
+  - `FinancialService`: Business logic for financial transactions
+  - `UserService`: Business logic for user management
+  - `FileUploadService`: Handles file uploads for receipts and attachments
+
+- **Repositories**: Data access layer
+  - `AdvanceReportRepository`: Data access for advance reports
+  - `ExpenseItemRepository`: Data access for expense items
+  - `FinancialTransactionRepository`: Data access for financial transactions
+  - `UserRepository`: Data access for users
+
+- **Models**: Domain entities
+  - `AdvanceReport`: Represents an advance report
+  - `ExpenseItem`: Represents an expense item in a report
+  - `Receipt`: Represents a receipt for an expense
+  - `ReceiptItem`: Represents an item in a receipt
+  - `Attachment`: Represents a file attachment
+  - `FinancialTransaction`: Represents a financial transaction
+  - `User`: Represents a user in the system
+
+- **Enums**: Define constants and types
+  - `ReportStatus`: Status of an advance report (DRAFT, SUBMITTED, UNDER_REVIEW, REJECTED, APPROVED, ARCHIVED)
+  - `TransactionType`: Type of financial transaction
+  - `UserRole`: User roles (EMPLOYEE, SUPERVISOR, ACCOUNTING, ADMIN)
+
+- **Security**: Authentication and authorization
+  - JWT-based authentication
+  - Role-based access control
+
+## Data Relationships
+
+- An advance report (`AdvanceReport`) has multiple expense items (`ExpenseItem`)
+- Each expense item has one receipt (`Receipt`)
+- Each receipt has multiple receipt items (`ReceiptItem`)
+- Each receipt has multiple attachments (`Attachment`) - photos of the receipt
+- Each expense item has multiple attachments (`Attachment`) - photos of confirmation or contract
+
+
+### Configuration
+
+The application can be configured using environment variables or by modifying the `application.properties` file:
+
+```properties
+
+# JWT Configuration
+jwt.secret=${JWT_SECRET:your_secret_key}
+jwt.access-token-validity=${JWT_ACCESS_TOKEN_VALIDITY:900000}
+jwt.refresh-token-validity=${JWT_REFRESH_TOKEN_VALIDITY:604800000}
+
+
+
+# Server Configuration
+server.port=${SERVER_PORT:8080}
+```
+
+
+### Main API Endpoints
+
+#### Advance Reports
+
+- `GET /api/v1/reports`: Get all reports (with optional filtering)
+- `GET /api/v1/reports/{id}`: Get a specific report
+- `POST /api/v1/reports`: Create a new report
+- `PUT /api/v1/reports/{id}`: Update a report
+- `DELETE /api/v1/reports/{id}`: Delete a report
+- `POST /api/v1/reports/{id}/submit`: Submit a report for review
+- `POST /api/v1/reports/{id}/approve`: Approve a report
+- `POST /api/v1/reports/{id}/reject`: Reject a report
+- `POST /api/v1/reports/{id}/archive`: Archive a report
+
+#### Financial Transactions
+
+- `GET /api/v1/finance/users/balance`: Get current user's balance
+- `GET /api/v1/finance/transactions`: Get all transactions (with optional filtering)
+- `POST /api/v1/finance/transactions`: Create a new transaction
+
+#### Users
+
+- `GET /api/v1/users`: Get all users
+- `GET /api/v1/users/{id}`: Get a specific user
+- `POST /api/v1/users`: Create a new user
+- `PUT /api/v1/users/{id}`: Update a user
+- `DELETE /api/v1/users/{id}`: Delete a user
+
+## User Roles and Permissions
+
+The system has four user roles with different permissions:
+
+1. **EMPLOYEE**:
+   - Create, view, update, and delete their own reports
+   - Submit reports for approval
+   - View their own financial transactions and balance
+
+2. **SUPERVISOR**:
+   - View reports submitted to them
+   - Approve or reject reports
+   - Add comments to reports
+
+3. **ACCOUNTING**:
+   - View all reports
+   - Create financial transactions
+   - Archive approved reports
+   - Add accounting reference numbers and comments
+
+4. **ADMIN**:
+   - Full access to all features
+   - Manage users and their roles
+
+## Workflow
+
+1. An employee creates an advance report for a business trip
+2. The employee adds expense items, receipts, and attachments to the report
+3. The employee submits the report to a supervisor
+4. The supervisor reviews the report and either approves or rejects it
+5. If rejected, the employee can update the report and resubmit it
+6. If approved, the accounting staff can process the report and archive it
+7. Financial transactions are created to track advances and reimbursements
+
+## Security
+
+The application uses JWT (JSON Web Token) for authentication. To access protected endpoints, clients must include a valid JWT token in the Authorization header:
+
+```
+Authorization: Bearer <token>
+```
+
+## File Storage
+
+The application supports file uploads for receipts and attachments. Files are stored in the directory specified by the `file.upload-dir` property.
+
+
+
+usefull classes from server code:
+enum class ReportStatus {
+    DRAFT, SUBMITTED, UNDER_REVIEW, REJECTED, APPROVED, ARCHIVED
+}
+enum class TransactionType {
+    ADVANCE, SETTLEMENT
+}
+enum class UserRole {
+    EMPLOYEE, SUPERVISOR, ACCOUNTING, ADMIN
+}
+
+Entity
+@Table(name = "advance_reports")
+data class AdvanceReport(
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long? = null,
+
+    var title: String,
+
+    var project: String,
+
+    var businessTripLocation: String,
+
+    var startDate: LocalDate,
+
+    var endDate: LocalDate,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    val user: User,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supervisor_id")
+    var supervisor: User? = null,
+
+    @Enumerated(EnumType.STRING)
+    var status: ReportStatus = ReportStatus.DRAFT,
+
+    var rejectionReason: String? = null,
+
+    @Column(precision = 10, scale = 2)
+    var previousBalance: BigDecimal = BigDecimal.ZERO,
+
+    @Column(precision = 10, scale = 2)
+    var totalAmount: BigDecimal = BigDecimal.ZERO,
+
+    @Column(precision = 10, scale = 2)
+    var currentBalance: BigDecimal = BigDecimal.ZERO,
+
+    // Additional information field
+    @Column(columnDefinition = "TEXT")
+    var additionalInfo: String? = null,
+
+    // Comment fields for an approval/rejection process
+    @Column(columnDefinition = "TEXT")
+    var supervisorComments: String? = null,
+
+    @Column(columnDefinition = "TEXT")
+    var accountingComments: String? = null,
+
+    // Accounting reference number (for integration with accounting systems)
+    var accountingReferenceNumber: String? = null,
+
+    val createdAt: LocalDateTime = LocalDateTime.now(),
+
+    var updatedAt: LocalDateTime = LocalDateTime.now()
+)
+
+@Entity
+@Table(name = "attachments")
+data class Attachment(
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long? = null,
+
+    // Many-to-one relationship with Receipt
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receipt_id")
+    val receipt: Receipt? = null,
+
+    // For cases when an attachment is directly linked to an expense item
+    // without going through a receipt
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "expense_item_id")
+    val expenseItem: ExpenseItem? = null,
+
+    val fileName: String,
+
+    val fileType: String,
+
+    val fileSize: Long,
+
+    val storagePath: String,
+
+    val createdAt: LocalDateTime = LocalDateTime.now()
+)
+
+data class ErrorResponse(
+    val code: String,
+    val message: String,
+    val timestamp: LocalDateTime = LocalDateTime.now()
+)
+
+@Entity
+@Table(name = "expense_items")
+data class ExpenseItem(
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long? = null,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "report_id")
+    val report: AdvanceReport,
+
+    var description: String,
+
+    var date: LocalDate,
+
+    var quantity: Int,
+
+    @Column(precision = 10, scale = 2)
+    var unitPrice: BigDecimal,
+
+    @Column(precision = 10, scale = 2)
+    var totalCost: BigDecimal,
+
+    var hasReceipt: Boolean = false,
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receipt_id")
+    var receipt: Receipt? = null,
+
+    val createdAt: LocalDateTime = LocalDateTime.now(),
+
+    var updatedAt: LocalDateTime = LocalDateTime.now()
+)
+
+@Entity
+@Table(name = "financial_transactions")
+data class FinancialTransaction(
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long? = null,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    val user: User,
+
+    @Column(precision = 10, scale = 2)
+    val amount: BigDecimal,
+
+    @Enumerated(EnumType.STRING)
+    val type: TransactionType,
+
+    val description: String? = null,
+
+    val transactionDate: LocalDate,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by")
+    val createdBy: User,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "advance_report_id")
+    val advanceReport: AdvanceReport? = null,
+
+    val createdAt: LocalDateTime = LocalDateTime.now()
+)
+
+@Entity
+@Table(name = "receipts")
+data class Receipt(
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long? = null,
+
+    val rawQrData: String? = null,
+
+    val validated: Boolean = false,
+
+    val storeName: String? = null,
+
+    val storeInn: String? = null,
+
+    val receiptNumber: String? = null,
+
+    val receiptDate: LocalDateTime? = null,
+
+    @Column(precision = 10, scale = 2)
+    val totalAmount: BigDecimal? = null,
+
+    var validatedAt: LocalDateTime? = null,
+
+    // One-to-many relationship with ReceiptItems
+    @OneToMany(mappedBy = "receipt", cascade = [CascadeType.ALL], orphanRemoval = true)
+    val items: MutableList<ReceiptItem> = mutableListOf(),
+
+    // One-to-many relationship with Attachments
+    @OneToMany(mappedBy = "receipt", cascade = [CascadeType.ALL], orphanRemoval = true)
+    val attachments: MutableList<Attachment> = mutableListOf(),
+
+    val createdAt: LocalDateTime = LocalDateTime.now()
+)
+
+@Entity
+@Table(name = "receipt_items")
+data class ReceiptItem(
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long? = null,
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receipt_id")
+    val receipt: Receipt,
+
+    val name: String,
+
+    val quantity: Double,
+
+    @Column(precision = 10, scale = 2)
+    val price: BigDecimal,
+
+    @Column(precision = 10, scale = 2)
+    val amount: BigDecimal,
+
+    val taxRate: Int? = null
+)
+
+@Entity
+@Table(name = "users")
+data class User(
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long? = null,
+
+    @Column(unique = true)
+    val username: String,
+
+    @Column(nullable = false)
+    var passwordHash: String,
+
+    var fullName: String,
+
+    var email: String,
+
+    @Enumerated(EnumType.STRING)
+    val role: UserRole,
+
+    var departmentId: Long? = null,
+
+    val createdAt: LocalDateTime = LocalDateTime.now(),
+
+    var updatedAt: LocalDateTime = LocalDateTime.now()
+)
+
+data class UserDto(
+    val id: Long,
+    val username: String,
+    val fullName: String,
+    val email: String,
+    val role: UserRole,
+    val departmentId: Long?
+)
+
+data class UserBalanceDto(
+    val userId: Long,
+    val balance: BigDecimal,
+    val lastUpdated: LocalDateTime
+)
+
+data class ReceiptItemDto(
+    val id: Long?,
+    val name: String,
+    val quantity: Double,
+    val price: BigDecimal,
+    val amount: BigDecimal,
+    val taxRate: Int?
+)
+
+data class ReceiptDto(
+    val id: Long?,
+    val rawQrData: String?,
+    val validated: Boolean,
+    val storeName: String?,
+    val storeInn: String?,
+    val receiptNumber: String?,
+    val receiptDate: LocalDateTime?,
+    val totalAmount: BigDecimal?,
+    val validatedAt: LocalDateTime?,
+    val items: List<ReceiptItemDto>,
+    val attachments: List<AttachmentDto>,
+    val createdAt: LocalDateTime
+)
+
+data class FinancialTransactionDto(
+    val id: Long?,
+    val user: UserDto,
+    val amount: BigDecimal,
+    val type: TransactionType,
+    val description: String?,
+    val transactionDate: LocalDate,
+    val createdBy: UserDto,
+    val createdAt: LocalDateTime
+)
+
+data class ExpenseItemDto(
+    val id: Long?,
+    val description: String,
+    val date: LocalDate,
+    val quantity: Int,
+    val unitPrice: BigDecimal,
+    val totalCost: BigDecimal,
+    val hasReceipt: Boolean,
+    val receipt: ReceiptDto?,
+    val attachments: List<AttachmentDto>,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime
+)
+
+data class AttachmentDto(
+    val id: Long?,
+    val fileName: String,
+    val fileType: String,
+    val fileSize: Long,
+    val createdAt: LocalDateTime
+)
+
+data class AdvanceReportDto(
+    val id: Long?,
+    val title: String,
+    val project: String,
+    val businessTripLocation: String,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+    val user: UserDto,
+    val supervisor: UserDto?,
+    val status: ReportStatus,
+    val rejectionReason: String?,
+    val previousBalance: BigDecimal,
+    val totalAmount: BigDecimal,
+    val currentBalance: BigDecimal,
+    val additionalInfo: String?,
+    val supervisorComments: String?,
+    val accountingComments: String?,
+    val accountingReferenceNumber: String?,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime,
+    val items: List<ExpenseItemDto>
+)
+
+data class TokenResponse(
+    val accessToken: String,
+    val refreshToken: String,
+    val tokenType: String = "Bearer",
+    val expiresIn: Long
+)
+
+data class LoginResponse(
+    val accessToken: String,
+    val refreshToken: String,
+    val user: UserDto
+)
+
+data class AdvanceReportResponse (
+    val id: Long? = null,
+    val userId: Long,
+    val supervisorId: Long?,
+    val status: ReportStatus,
+    val description: String?
+)
+
+data class ValidateReceiptRequest(
+    val qrData: String
+)
+
+data class UpdateUserRequest(
+    val fullName: String?,
+    val email: String?,
+    val departmentId: Long?
+)
+
+data class UpdateExpenseItemRequest(
+    val description: String?,
+    val date: LocalDate?,
+    val quantity: Int?,
+    val unitPrice: BigDecimal?
+)
+
+data class UpdateAdvanceReportRequest(
+    val title: String?,
+    val project: String?,
+    val businessTripLocation: String?,
+    val startDate: LocalDate?,
+    val endDate: LocalDate?,
+    val additionalInfo: String?
+)
+
+data class RejectReportRequest(
+    val reason: String,
+    val comments: String?
+)
+
+data class RefreshTokenRequest(
+    @field:NotBlank(message = "Refresh token is required")
+    val refreshToken: String
+)
+
+data class CreateUserRequest(
+    val username: String,
+    val password: String,
+    val fullName: String,
+    val email: String,
+    val role: UserRole,
+    val departmentId: Long?
+)
+
+data class LoginRequest(
+    @field:NotBlank(message = "Username is required")
+    val username: String,
+
+    @field:NotBlank(message = "Password is required")
+    val password: String
+)
+
+data class CreateFinancialTransactionRequest(
+    val userId: Long,
+    val amount: BigDecimal,
+    val type: TransactionType,
+    val description: String?,
+    val transactionDate: LocalDate
+)
+
+data class CreateExpenseItemRequest(
+    val description: String,
+    val date: LocalDate,
+    val quantity: Int,
+    val unitPrice: BigDecimal,
+    val hasReceipt: Boolean = false
+)
+
+data class CreateAdvanceReportRequest(
+    val title: String,
+    val project: String,
+    val businessTripLocation: String,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+    val additionalInfo: String?
+)
+
+data class ChangePasswordRequest(
+    val currentPassword: String,
+    val newPassword: String
+)
+
+data class ArchiveReportRequest(
+    val accountingReferenceNumber: String?,
+    val comments: String?
+)
+
+data class ApproveReportRequest(
+    val comments: String?
+)
+
+
+
+it is necessary to write a whole mobile application for this api. kotlin, jetpack compose for android. I have the basis of the project. use the classes that I provided. You don't need to rewrite them. use mvvm, clean architecture, viewmodel, event sealed class. If possible, use retrofit, room, material3, CoroutineWorker, dagger2. Use a modern user-friendly UI/ux. Write only presentation layer - ui, viewmodels, sealed classes. app must fully works, but without any values and data - to show how it can work.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// MainActivity.kt
+package com.advancereports.ui
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import com.advancereports.ui.navigation.AdvanceReportNavigation
+import com.advancereports.ui.theme.AdvanceReportTheme
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            AdvanceReportTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AdvanceReportNavigation()
+                }
+            }
+        }
+    }
+}
+
+// navigation/AdvanceReportNavigation.kt
+package com.advancereports.ui.navigation
+
+import androidx.compose.runtime.Composable
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.advancereports.ui.screens.auth.LoginScreen
+import com.advancereports.ui.screens.reports.ReportsListScreen
+import com.advancereports.ui.screens.reports.ReportDetailScreen
+import com.advancereports.ui.screens.reports.CreateReportScreen
+
+@Composable
+fun AdvanceReportNavigation(
+    navController: NavHostController = rememberNavController()
+) {
+    NavHost(
+        navController = navController,
+        startDestination = "login"
+    ) {
+        composable("login") {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate("reports") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                }
+            )
+        }
+        
+        composable("reports") {
+            ReportsListScreen(
+                onReportClick = { reportId ->
+                    navController.navigate("report_detail/$reportId")
+                },
+                onCreateReport = {
+                    navController.navigate("create_report")
+                }
+            )
+        }
+        
+        composable("report_detail/{reportId}") { backStackEntry ->
+            val reportId = backStackEntry.arguments?.getString("reportId")?.toLongOrNull() ?: 0L
+            ReportDetailScreen(
+                reportId = reportId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        
+        composable("create_report") {
+            CreateReportScreen(
+                onReportCreated = {
+                    navController.popBackStack()
+                },
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+    }
+}
+
+// events/AuthEvent.kt
+package com.advancereports.ui.events
+
+sealed class AuthEvent {
+    data class Login(val username: String, val password: String) : AuthEvent()
+    object Logout : AuthEvent()
+    data class RefreshToken(val refreshToken: String) : AuthEvent()
+    object ClearError : AuthEvent()
+}
+
+// events/ReportEvent.kt
+package com.advancereports.ui.events
+
+import com.advancereports.data.models.CreateAdvanceReportRequest
+import com.advancereports.data.models.ReportStatus
+import java.math.BigDecimal
+
+sealed class ReportEvent {
+    object LoadReports : ReportEvent()
+    data class LoadReportDetail(val reportId: Long) : ReportEvent()
+    data class CreateReport(val request: CreateAdvanceReportRequest) : ReportEvent()
+    data class UpdateReport(val reportId: Long, val title: String, val project: String) : ReportEvent()
+    data class SubmitReport(val reportId: Long) : ReportEvent()
+    data class ApproveReport(val reportId: Long, val comments: String?) : ReportEvent()
+    data class RejectReport(val reportId: Long, val reason: String, val comments: String?) : ReportEvent()
+    data class FilterReports(val status: ReportStatus?) : ReportEvent()
+    data class AddExpenseItem(val reportId: Long, val description: String, val amount: BigDecimal) : ReportEvent()
+    object ClearError : ReportEvent()
+}
+
+// states/AuthState.kt
+package com.advancereports.ui.states
+
+import com.advancereports.data.models.UserDto
+
+data class AuthState(
+    val isLoading: Boolean = false,
+    val isAuthenticated: Boolean = false,
+    val user: UserDto? = null,
+    val error: String? = null,
+    val accessToken: String? = null
+)
+
+// states/ReportState.kt
+package com.advancereports.ui.states
+
+import com.advancereports.data.models.AdvanceReportDto
+import com.advancereports.data.models.ReportStatus
+
+data class ReportState(
+    val isLoading: Boolean = false,
+    val reports: List<AdvanceReportDto> = emptyList(),
+    val currentReport: AdvanceReportDto? = null,
+    val error: String? = null,
+    val filterStatus: ReportStatus? = null,
+    val isCreating: Boolean = false
+)
+
+// viewmodels/AuthViewModel.kt
+package com.advancereports.ui.viewmodels
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.advancereports.ui.events.AuthEvent
+import com.advancereports.ui.states.AuthState
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+@HiltViewModel
+class AuthViewModel @Inject constructor(
+    // private val authRepository: AuthRepository
+) : ViewModel() {
+    
+    private val _state = MutableStateFlow(AuthState())
+    val state: StateFlow<AuthState> = _state.asStateFlow()
+    
+    fun onEvent(event: AuthEvent) {
+        when (event) {
+            is AuthEvent.Login -> login(event.username, event.password)
+            is AuthEvent.Logout -> logout()
+            is AuthEvent.RefreshToken -> refreshToken(event.refreshToken)
+            is AuthEvent.ClearError -> clearError()
+        }
+    }
+    
+    private fun login(username: String, password: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null)
+            
+            try {
+                // Simulate API call
+                kotlinx.coroutines.delay(1000)
+                
+                // Mock successful login
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    isAuthenticated = true,
+                    accessToken = "mock_token"
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Login failed"
+                )
+            }
+        }
+    }
+    
+    private fun logout() {
+        _state.value = AuthState()
+    }
+    
+    private fun refreshToken(refreshToken: String) {
+        // Implementation for token refresh
+    }
+    
+    private fun clearError() {
+        _state.value = _state.value.copy(error = null)
+    }
+}
+
+// viewmodels/ReportViewModel.kt
+package com.advancereports.ui.viewmodels
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.advancereports.data.models.AdvanceReportDto
+import com.advancereports.data.models.ReportStatus
+import com.advancereports.data.models.UserDto
+import com.advancereports.data.models.UserRole
+import com.advancereports.ui.events.ReportEvent
+import com.advancereports.ui.states.ReportState
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.LocalDateTime
+import javax.inject.Inject
+
+@HiltViewModel
+class ReportViewModel @Inject constructor(
+    // private val reportRepository: ReportRepository
+) : ViewModel() {
+    
+    private val _state = MutableStateFlow(ReportState())
+    val state: StateFlow<ReportState> = _state.asStateFlow()
+    
+    fun onEvent(event: ReportEvent) {
+        when (event) {
+            is ReportEvent.LoadReports -> loadReports()
+            is ReportEvent.LoadReportDetail -> loadReportDetail(event.reportId)
+            is ReportEvent.CreateReport -> createReport(event.request)
+            is ReportEvent.SubmitReport -> submitReport(event.reportId)
+            is ReportEvent.ApproveReport -> approveReport(event.reportId, event.comments)
+            is ReportEvent.RejectReport -> rejectReport(event.reportId, event.reason, event.comments)
+            is ReportEvent.FilterReports -> filterReports(event.status)
+            is ReportEvent.ClearError -> clearError()
+            else -> {}
+        }
+    }
+    
+    private fun loadReports() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true)
+            
+            try {
+                // Simulate API call
+                kotlinx.coroutines.delay(1000)
+                
+                // Mock data
+                val mockReports = listOf(
+                    createMockReport(1L, "Business Trip - Berlin", ReportStatus.DRAFT),
+                    createMockReport(2L, "Conference - Munich", ReportStatus.SUBMITTED),
+                    createMockReport(3L, "Client Meeting - Hamburg", ReportStatus.APPROVED)
+                )
+                
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    reports = mockReports
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to load reports"
+                )
+            }
+        }
+    }
+    
+    private fun loadReportDetail(reportId: Long) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true)
+            
+            try {
+                kotlinx.coroutines.delay(800)
+                
+                val mockReport = createMockReport(reportId, "Business Trip - Berlin", ReportStatus.DRAFT)
+                
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    currentReport = mockReport
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to load report"
+                )
+            }
+        }
+    }
+    
+    private fun createReport(request: com.advancereports.data.models.CreateAdvanceReportRequest) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isCreating = true)
+            
+            try {
+                kotlinx.coroutines.delay(1000)
+                
+                // Mock successful creation
+                _state.value = _state.value.copy(isCreating = false)
+                loadReports() // Refresh the list
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isCreating = false,
+                    error = e.message ?: "Failed to create report"
+                )
+            }
+        }
+    }
+    
+    private fun submitReport(reportId: Long) {
+        viewModelScope.launch {
+            try {
+                kotlinx.coroutines.delay(500)
+                // Mock submission
+                loadReports()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = e.message)
+            }
+        }
+    }
+    
+    private fun approveReport(reportId: Long, comments: String?) {
+        viewModelScope.launch {
+            try {
+                kotlinx.coroutines.delay(500)
+                loadReports()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = e.message)
+            }
+        }
+    }
+    
+    private fun rejectReport(reportId: Long, reason: String, comments: String?) {
+        viewModelScope.launch {
+            try {
+                kotlinx.coroutines.delay(500)
+                loadReports()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(error = e.message)
+            }
+        }
+    }
+    
+    private fun filterReports(status: ReportStatus?) {
+        _state.value = _state.value.copy(filterStatus = status)
+        loadReports()
+    }
+    
+    private fun clearError() {
+        _state.value = _state.value.copy(error = null)
+    }
+    
+    private fun createMockReport(id: Long, title: String, status: ReportStatus): AdvanceReportDto {
+        return AdvanceReportDto(
+            id = id,
+            title = title,
+            project = "Project Alpha",
+            businessTripLocation = "Berlin, Germany",
+            startDate = LocalDate.now(),
+            endDate = LocalDate.now().plusDays(3),
+            user = UserDto(1L, "john.doe", "John Doe", "john@company.com", UserRole.EMPLOYEE, null),
+            supervisor = UserDto(2L, "jane.smith", "Jane Smith", "jane@company.com", UserRole.SUPERVISOR, null),
+            status = status,
+            rejectionReason = null,
+            previousBalance = BigDecimal("1000.00"),
+            totalAmount = BigDecimal("2500.00"),
+            currentBalance = BigDecimal("3500.00"),
+            additionalInfo = "Business trip for client presentation",
+            supervisorComments = null,
+            accountingComments = null,
+            accountingReferenceNumber = null,
+            createdAt = LocalDateTime.now().minusDays(2),
+            updatedAt = LocalDateTime.now(),
+            items = emptyList()
+        )
+    }
+}
+
+// screens/auth/LoginScreen.kt
+package com.advancereports.ui.screens.auth
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.advancereports.ui.events.AuthEvent
+import com.advancereports.ui.viewmodels.AuthViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LoginScreen(
+    onLoginSuccess: () -> Unit,
+    viewModel: AuthViewModel = hiltViewModel()
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(state.isAuthenticated) {
+        if (state.isAuthenticated) {
+            onLoginSuccess()
+        }
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Advance Reports",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            text = "Sign in to your account",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Username") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+            singleLine = true
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            modifier = Modifier.fillMaxWidth(),
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                    )
+                }
+            },
+            singleLine = true
+        )
+        
+        if (state.error != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = state.error!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Button(
+            onClick = {
+                viewModel.onEvent(AuthEvent.Login(username, password))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !state.isLoading && username.isNotBlank() && password.isNotBlank()
+        ) {
+            if (state.isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            } else {
+                Text("Sign In")
+            }
+        }
+    }
+}
+
+// screens/reports/ReportsListScreen.kt
+package com.advancereports.ui.screens.reports
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.advancereports.data.models.ReportStatus
+import com.advancereports.ui.components.ReportCard
+import com.advancereports.ui.events.ReportEvent
+import com.advancereports.ui.viewmodels.ReportViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReportsListScreen(
+    onReportClick: (Long) -> Unit,
+    onCreateReport: () -> Unit,
+    viewModel: ReportViewModel = hiltViewModel()
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    var showFilterMenu by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(Unit) {
+        viewModel.onEvent(ReportEvent.LoadReports)
+    }
+    
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Advance Reports") },
+                actions = {
+                    IconButton(onClick = { showFilterMenu = true }) {
+                        Icon(Icons.Default.FilterList, contentDescription = "Filter")
+                    }
+                    
+                    DropdownMenu(
+                        expanded = showFilterMenu,
+                        onDismissRequest = { showFilterMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("All Reports") },
+                            onClick = {
+                                viewModel.onEvent(ReportEvent.FilterReports(null))
+                                showFilterMenu = false
+                            }
+                        )
+                        ReportStatus.values().forEach { status ->
+                            DropdownMenuItem(
+                                text = { Text(status.name) },
+                                onClick = {
+                                    viewModel.onEvent(ReportEvent.FilterReports(status))
+                                    showFilterMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onCreateReport
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Create Report")
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            if (state.filterStatus != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Text(
+                        text = "Filtered by: ${state.filterStatus!!.name}",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+            
+            when {
+                state.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                
+                state.error != null -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = state.error!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Button(
+                            onClick = { viewModel.onEvent(ReportEvent.LoadReports) }
+                        ) {
+                            Text("Retry")
+                        }
+                    }
+                }
+                
+                state.reports.isEmpty() -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "No reports found",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "Create your first advance report",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.reports) { report ->
+                            ReportCard(
+                                report = report,
+                                onClick = { onReportClick(report.id ?: 0L) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// components/ReportCard.kt
+package com.advancereports.ui.components
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.advancereports.data.models.AdvanceReportDto
+import com.advancereports.data.models.ReportStatus
+import java.time.format.DateTimeFormatter
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReportCard(
+    report: AdvanceReportDto,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = report.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Text(
+                        text = report.project,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Text(
+                        text = report.businessTripLocation,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                StatusChip(status = report.status)
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Duration",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${report.startDate.format(DateTimeFormatter.ofPattern("MMM dd"))} - ${report.endDate.format(DateTimeFormatter.ofPattern("MMM dd"))}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "Total Amount",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "€${report.totalAmount}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusChip(status: ReportStatus) {
+    val color = when (status) {
+        ReportStatus.DRAFT -> MaterialTheme.colorScheme.outline
+        ReportStatus.SUBMITTED -> MaterialTheme.colorScheme.primary
+        ReportStatus.UNDER_REVIEW -> MaterialTheme.colorScheme.tertiary
+        ReportStatus.APPROVED -> MaterialTheme.colorScheme.primary
+        ReportStatus.REJECTED -> MaterialTheme.colorScheme.error
+        ReportStatus.ARCHIVED -> MaterialTheme.colorScheme.outline
+    }
+    
+    AssistChip(
+        onClick = { },
+        label = { Text(status.name) },
+        colors = AssistChipDefaults.assistChipColors(
+            labelColor = color
+        )
+    )
+}
+
+ -> Unit
+) {
+    val colorScheme = when {
+        darkTheme -> DarkColorScheme
+        else -> LightColorScheme
+    }
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography(),
+        content = content
+    )
+}
